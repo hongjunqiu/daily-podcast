@@ -1,0 +1,24 @@
+# 每日科技播客 Pipeline 配置
+# 路径和参数集中管理，方便 cron 集成时直接引用
+
+# 早报输入（方案 A：从早报 cron 存下来的文件读取）
+news_input_dir: "/Users/hongjun/.openclaw/workspace/tech-daily"
+news_filename_pattern: "{date}.md"  # 用 date 占位，如 2026-04-01.md
+
+# Astro 网站 repo
+site_repo: "/Users/hongjun/.openclaw/workspace/hongjunqiu-site"
+
+# LLM 配置（对话脚本生成）
+llm_model: "claude-sonnet-4-20250514"
+api_key_label: "ANTHROPIC_API_KEY"
+
+# Pipeline 输出目录（在项目内）
+output:
+  transcripts: "./data/transcripts"
+  audio: "./data/audio"
+
+# Cron 调度
+cron:
+  # 播客生成时间（早报 08:00 后 30 分钟缓冲）
+  schedule: "30 8 * * *"
+  timezone: "Asia/Shanghai"

@@ -1,0 +1,63 @@
+# 每日科技播客 — Podcastfy 对话配置
+# 用法: podcastfy.generate_podcast(conversation_config=<path>)
+
+conversation_style:
+  - "engaging"
+  - "informative"
+  - "humorous"
+  - "conversational"
+
+roles_person1: "主讲人，负责总结和讲解科技新闻要点"
+roles_person2: "提问者/评论者，负责提问、补充观点和吐槽"
+
+dialogue_structure:
+  - "开场寒暄与节目介绍"
+  - "今日头条新闻"
+  - "深度解读 2-3 条重点新闻"
+  - "快讯速览"
+  - "总结与结尾"
+
+podcast_name: "科技早知道"
+podcast_tagline: "每天 5 分钟，掌握科技圈大小事"
+output_language: "Chinese"
+
+engagement_techniques:
+  - "rhetorical questions"
+  - "humor"
+  - "analogies"
+  - "pop culture references"
+  - "listener interaction prompts"
+
+creativity: 0.8
+
+user_instructions: |
+  你是一档中文科技播客的对话脚本生成器。
+  请基于提供的科技早报内容，生成两位主持人之间自然、流畅的对话。
+
+  要求：
+  1. 对话风格轻松诙谐，像朋友聊天，不要像新闻播报
+  2. Person1（安洋）是主讲人，负责介绍和分析新闻
+  3. Person2（芊悦）是搭档，负责提问、评论、吐槽
+  4. 每条新闻用对话形式展开，不要简单罗列
+  5. 适当加入类比、段子、流行文化梗让内容更有趣
+  6. 全部使用中文，英文术语需翻译或用中文表述（如"人工智能"而非"AI"）
+  7. 控制总对话长度在 3000-6000 字，对应 5-10 分钟播客
+  8. 开头要有自然的开场白，结尾要有下期预告或告别语
+  9. 使用 <Person1></Person1> 和 <Person2></Person2> 标签包裹每段对话
+
+max_num_chunks: 6
+min_chunk_size: 800
+
+text_to_speech:
+  default_tts_model: "cosyvoice"
+  output_directories:
+    transcripts: "./data/transcripts"
+    audio: "./data/audio"
+  cosyvoice:
+    default_voices:
+      question: "longanyang_v2"      # 男主持 — 龙安洋
+      answer: "qianxue"              # 女主持 — 芊悦
+    model: "cosyvoice-v2"
+  audio_format: "mp3"
+  temp_audio_dir: "data/audio/tmp/"
+  ending_message: "感谢收听，我们明天见！"
