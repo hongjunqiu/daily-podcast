@@ -117,10 +117,25 @@ def merge_audio_files(audio_files: List[str], output_path: str) -> str:
     """
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    # 创建 ffmpeg concat 列表文件
+    # 生成 400ms 静音文件用于段落间停顿
+    silence_path = os.path.join(os.path.dirname(output_path), "_silence_400ms.mp3")
+    silence_cmd = [
+        "ffmpeg", "-y", "-f", "lavfi",
+        "-i", "anullsrc=r=24000:cl=mono",
+        "-t", "0.4",
+        "-acodec", "libmp3lame", "-q:a", "2",
+        silence_path,
+    ]
+    silence_result = subprocess.run(silence_cmd, capture_output=True, text=True)
+    if silence_result.returncode != 0:
+        raise RuntimeError(f"ffmpeg 生成静音文件失败:\n{silence_result.stderr}")
+
+    # 创建 ffmpeg concat 列表文件，段落间插入静音
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-        for audio in audio_files:
+        for i, audio in enumerate(audio_files):
             f.write(f"file '{audio}'\n")
+            if i < len(audio_files) - 1:
+                f.write(f"file '{silence_path}'\n")
         concat_list = f.name
 
     try:
@@ -135,6 +150,8 @@ def merge_audio_files(audio_files: List[str], output_path: str) -> str:
             raise RuntimeError(f"ffmpeg 合并失败:\n{result.stderr}")
     finally:
         os.unlink(concat_list)
+        if os.path.exists(silence_path):
+            os.unlink(silence_path)
 
     logger.info("音频合并完成: %s (%d bytes)", output_path, os.path.getsize(output_path))
     return output_path

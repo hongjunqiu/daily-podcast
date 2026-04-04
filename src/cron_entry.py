@@ -24,6 +24,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(__file__))
 
 from pipeline import run_pipeline
+from script_gen_v2 import build_prompt, validate_script, save_transcript, load_news_content
 
 logger = logging.getLogger("daily_podcast.cron")
 
@@ -81,15 +82,44 @@ def main():
         notify_failure(f"早报文件不存在: {news_path}")
         sys.exit(1)
 
-    # 运行 pipeline
+    # Step 1: 读取早报 → 生成对话脚本
     try:
+        news_content = load_news_content(news_path)
+        prompt = build_prompt(news_content)
+        logger.info("Prompt 构建完成 (%d 字)", len(prompt))
+
+        # 调用 LLM 生成对话脚本
+        llm_model = config.get("llm_model", "claude-sonnet-4-20250514")
+        api_key_label = config.get("api_key_label", "ANTHROPIC_API_KEY")
+        api_key = os.environ.get(api_key_label)
+        if not api_key:
+            raise RuntimeError(f"环境变量 {api_key_label} 未设置")
+
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model=llm_model,
+            max_tokens=8192,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        script_text = response.content[0].text
+        logger.info("LLM 生成脚本完成 (%d 字)", len(script_text))
+
+        # 验证并保存脚本
+        validate_script(script_text)
+        transcript_path = save_transcript(script_text, date=date_str)
+        logger.info("脚本已保存: %s", transcript_path)
+
+        if args.transcript_only:
+            logger.info("--transcript-only 模式，跳过 TTS/发布")
+            return
+
+        # Step 2: 运行 TTS + 音频合并 + 发布 pipeline
         results = run_pipeline(
-            input_path=news_path,
+            transcript_path=transcript_path,
             site_repo=config.get("site_repo"),
-            llm_model=config.get("llm_model", "claude-sonnet-4-20250514"),
-            api_key_label=config.get("api_key_label", "ANTHROPIC_API_KEY"),
             dry_run=args.dry_run,
-            transcript_only=args.transcript_only,
+            date=date_str,
         )
 
         logger.info("Pipeline 完成:")

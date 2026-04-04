@@ -7,7 +7,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from script_gen import build_prompt, validate_script, save_transcript, load_news_content
+from script_gen_v2 import build_prompt, validate_script, save_transcript, load_news_content
 
 
 class TestBuildPrompt(unittest.TestCase):
@@ -20,7 +20,7 @@ class TestBuildPrompt(unittest.TestCase):
 
     def test_includes_format_requirements(self):
         prompt = build_prompt("测试内容")
-        self.assertIn("全部使用中文", prompt)
+        self.assertIn("中文科技播客", prompt)
         self.assertIn("<芊悦>", prompt)
         self.assertIn("<萌萌>", prompt)
 
@@ -31,25 +31,23 @@ class TestValidateScript(unittest.TestCase):
         script = (
             "<芊悦>大家好！</芊悦>"
             "<萌萌>你好！</萌萌>"
-            "<芊悦>今天新闻很多。</芊悦>"
-            "<萌萌>快说快说！</萌萌>"
-        )
+        ) * 18  # 36 turns total
         self.assertTrue(validate_script(script))
 
     def test_no_qianyue_raises(self):
         with self.assertRaises(ValueError):
-            validate_script("<萌萌>只有我一个人</萌萌>" * 4)
+            validate_script("<萌萌>只有我一个人</萌萌>" * 40)
 
     def test_no_mengmeng_raises(self):
         with self.assertRaises(ValueError):
-            validate_script("<芊悦>只有我一个人</芊悦>" * 4)
+            validate_script("<芊悦>只有我一个人</芊悦>" * 40)
 
     def test_too_few_segments_raises(self):
         with self.assertRaises(ValueError):
-            validate_script("<芊悦>你好</芊悦><萌萌>嗨</萌萌>")
+            validate_script("<芊悦>你好</芊悦><萌萌>嗨</萌萌>" * 10)
 
     def test_unclosed_tag_raises(self):
-        script = "<芊悦>开头<芊悦>又开头</芊悦><萌萌>回复</萌萌>" * 2
+        script = "<芊悦>开头<芊悦>又开头</芊悦><萌萌>回复</萌萌>" * 20
         with self.assertRaises(ValueError):
             validate_script(script)
 

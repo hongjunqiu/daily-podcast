@@ -1,0 +1,25 @@
+# 节目元信息
+show:
+  name: "科技早知道"
+  slogan: "每天 5 分钟，掌握科技圈大小事"
+  tagline: "两个科技迷女孩的每日科技闲聊"
+  duration_target: "5-8 分钟"
+  script_length: "3000-5000 字"
+
+hosts:
+  - name: "芊悦"
+    voice: "Cherry"
+    role: "主讲"
+    personality: "阳光大方、有主见、喜欢深挖新闻背后的逻辑，偶尔毒舌"
+  - name: "萌萌"
+    voice: "Bunny"
+    role: "搭档"
+    personality: "活泼好奇、敢于挑战和质疑、喜欢用生活类比解释技术、梗王"
+
+opening_template: |
+  <芊悦>嘿！大家好，欢迎收听《科技早知道》，我是芊悦～今天是{date}，{weekday}。</芊悦>
+  <萌萌>我是萌萌！今天有几条消息真的让我震惊了——{highlight_teaser}，咱们赶紧聊起来！</萌萌>
+
+closing_template: |
+  <芊悦>好啦，今天的科技早知道就到这里～{summary}</芊悦>
+  <萌萌>{next_hook} 记得关注我们，每天 5 分钟，掌握科技圈大小事！我们明天见～</萌萌>

@@ -9,6 +9,8 @@ import logging
 import os
 import subprocess
 import tempfile
+import time
+import urllib.error
 import urllib.request
 from typing import Optional
 
@@ -85,8 +87,34 @@ def synthesize_segment(
 
     logger.info("TTS 合成: voice=%s, text_len=%d", voice_name, len(text))
 
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        result = json.loads(resp.read().decode("utf-8"))
+    max_retries = 3
+    backoff_seconds = [1, 2, 4]
+    last_error = None
+
+    for attempt in range(max_retries):
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+            break
+        except (urllib.error.URLError, TimeoutError) as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                wait = backoff_seconds[attempt]
+                logger.warning(
+                    "TTS 请求失败 (attempt %d/%d): %s — %ds 后重试",
+                    attempt + 1, max_retries, e, wait,
+                )
+                time.sleep(wait)
+                # 重建 request（urlopen 消费了 data）
+                req = urllib.request.Request(
+                    API_URL,
+                    data=json.dumps(request_body).encode("utf-8"),
+                    headers=headers,
+                    method="POST",
+                )
+            else:
+                logger.error("TTS 请求失败，已耗尽重试: %s", e)
+                raise
 
     audio_url = result.get("output", {}).get("audio", {}).get("url")
     if not audio_url:
