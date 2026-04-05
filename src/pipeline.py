@@ -325,16 +325,6 @@ def generate_blog_post(
     news_path: Optional[str] = None,
 ) -> str:
     """生成 Astro blog post markdown 文件。"""
-    # 提取摘要
-    segments = re.findall(r"<(芊悦|萌萌)>(.*?)</\1>", transcript_text, re.DOTALL)
-    excerpts = []
-    for speaker, text in segments[:3]:
-        clean = text.strip()[:50].replace("\n", " ")
-        if clean:
-            excerpts.append(clean)
-    excerpt = "；".join(excerpts) + "..."
-    # 转义单引号
-    excerpt = excerpt.replace("'", "''")
 
     # 转为可读文本
     readable = transcript_text
@@ -354,14 +344,12 @@ def generate_blog_post(
     if news_path:
         news_section = parse_news_markdown(news_path)
 
-    # wavesurfer 播放器
-    player_html = _wavesurfer_player(audio_filename)
-
     if news_section:
         post_content = f"""---
 publishDate: {date}
 title: '每日科技播客 {date}'
-excerpt: '{excerpt}'
+excerpt: ''
+audio: /audio/podcast/{audio_filename}
 category: podcast
 tags:
   - podcast
@@ -369,7 +357,6 @@ tags:
 author: AI Hosts
 ---
 {news_summary}
-{player_html}
 
 ---
 
@@ -390,15 +377,14 @@ author: AI Hosts
         post_content = f"""---
 publishDate: {date}
 title: '每日科技播客 {date}'
-excerpt: '{excerpt}'
+excerpt: ''
+audio: /audio/podcast/{audio_filename}
 category: podcast
 tags:
   - podcast
   - tech-daily
 author: AI Hosts
 ---
-
-{player_html}
 
 ---
 
