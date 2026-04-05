@@ -233,27 +233,46 @@ def _extract_news_headlines(news_path: str, max_items: int = 5) -> List[str]:
 
 def _wavesurfer_player(audio_filename: str) -> str:
     """生成 wavesurfer.js 内联播放器 HTML。"""
-    return f'''<div id="waveform" style="margin: 1rem 0;"></div>
-<div style="display: flex; align-items: center; gap: 12px; margin: 8px 0;">
-  <button id="playBtn" style="background: #6366f1; color: white; border: none; border-radius: 50%; width: 48px; height: 48px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center;">▶</button>
-  <span id="currentTime" style="font-variant-numeric: tabular-nums; color: #6b7280;">0:00</span>
-  <span style="color: #9ca3af;">/</span>
-  <span id="duration" style="font-variant-numeric: tabular-nums; color: #6b7280;">0:00</span>
+    return f'''<div style="background: linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%); border-radius: 12px; padding: 16px; margin: 1rem 0;">
+  <div id="waveform" style="border-radius: 8px; overflow: hidden;"></div>
+  <div style="display: flex; align-items: center; gap: 12px; margin-top: 12px;">
+    <button id="playBtn" style="background: #6366f1; color: white; border: none; border-radius: 50%; width: 48px; height: 48px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">▶</button>
+    <span id="currentTime" style="font-variant-numeric: tabular-nums; color: #6b7280;">0:00</span>
+    <span style="color: #9ca3af;">/</span>
+    <span id="duration" style="font-variant-numeric: tabular-nums; color: #6b7280;">0:00</span>
+    <div style="margin-left: auto; display: flex; gap: 4px;">
+      <button class="speed-btn" data-speed="0.5" style="background: transparent; color: #6b7280; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px;">0.5x</button>
+      <button class="speed-btn" data-speed="1" style="background: #6366f1; color: white; border: 1px solid #6366f1; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px;">1x</button>
+      <button class="speed-btn" data-speed="1.5" style="background: transparent; color: #6b7280; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px;">1.5x</button>
+      <button class="speed-btn" data-speed="2" style="background: transparent; color: #6b7280; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px;">2x</button>
+    </div>
+  </div>
 </div>
 
 <script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.esm.js" type="module"></script>
 <script type="module">
 import WaveSurfer from 'https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.esm.js';
 
+const ctx = document.createElement('canvas').getContext('2d');
+const gradient = ctx.createLinearGradient(0, 0, 0, 80);
+gradient.addColorStop(0, '#818cf8');
+gradient.addColorStop(0.5, '#a5b4fc');
+gradient.addColorStop(1, '#c7d2fe');
+const progressGradient = ctx.createLinearGradient(0, 0, 0, 80);
+progressGradient.addColorStop(0, '#4f46e5');
+progressGradient.addColorStop(0.5, '#6366f1');
+progressGradient.addColorStop(1, '#818cf8');
+
 const wavesurfer = WaveSurfer.create({{
   container: '#waveform',
-  waveColor: '#a5b4fc',
-  progressColor: '#6366f1',
+  waveColor: gradient,
+  progressColor: progressGradient,
   cursorColor: '#4f46e5',
   barWidth: 3,
   barRadius: 3,
   barGap: 2,
   height: 80,
+  normalize: true,
   url: '/audio/podcast/{audio_filename}'
 }});
 
@@ -281,6 +300,20 @@ playBtn.addEventListener('click', () => {{
 
 wavesurfer.on('play', () => {{ playBtn.textContent = '⏸'; }});
 wavesurfer.on('pause', () => {{ playBtn.textContent = '▶'; }});
+
+document.querySelectorAll('.speed-btn').forEach(btn => {{
+  btn.addEventListener('click', () => {{
+    document.querySelectorAll('.speed-btn').forEach(b => {{
+      b.style.background = 'transparent';
+      b.style.color = '#6b7280';
+      b.style.borderColor = '#e5e7eb';
+    }});
+    btn.style.background = '#6366f1';
+    btn.style.color = 'white';
+    btn.style.borderColor = '#6366f1';
+    wavesurfer.setPlaybackRate(parseFloat(btn.dataset.speed));
+  }});
+}});
 </script>'''
 
 
@@ -314,7 +347,7 @@ def generate_blog_post(
     if news_path:
         headlines = _extract_news_headlines(news_path)
         if headlines:
-            news_summary = f"\n> 📌 **今日看点**：{' | '.join(headlines)}\n"
+            news_summary = '\n<blockquote style="font-size: 0.875rem; line-height: 1.5; border-left: 3px solid #6366f1; padding: 0.5rem 1rem; margin: 1rem 0; background: #f8fafc;">\n📌 <strong>今日看点</strong>：' + ' | '.join(headlines) + '\n</blockquote>\n'
 
     # 解析新闻列表
     news_section = ""
@@ -329,7 +362,6 @@ def generate_blog_post(
 publishDate: {date}
 title: '每日科技播客 {date}'
 excerpt: '{excerpt}'
-image: ~/assets/images/podcast-cover.png
 category: podcast
 tags:
   - podcast
@@ -359,7 +391,6 @@ author: AI Hosts
 publishDate: {date}
 title: '每日科技播客 {date}'
 excerpt: '{excerpt}'
-image: ~/assets/images/podcast-cover.png
 category: podcast
 tags:
   - podcast
