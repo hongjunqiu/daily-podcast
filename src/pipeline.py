@@ -221,6 +221,69 @@ def parse_news_markdown(news_path: str) -> str:
     return "\n\n".join(sections)
 
 
+def _extract_news_headlines(news_path: str, max_items: int = 5) -> List[str]:
+    """从早报 markdown 提取前 N 条新闻标题。"""
+    p = Path(news_path)
+    if not p.exists():
+        return []
+    content = p.read_text(encoding="utf-8")
+    titles = re.findall(r"^\d+\.\s+\*\*(.+?)\*\*\s*[—–-]", content, re.MULTILINE)
+    return titles[:max_items]
+
+
+def _wavesurfer_player(audio_filename: str) -> str:
+    """生成 wavesurfer.js 内联播放器 HTML。"""
+    return f'''<div id="waveform" style="margin: 1rem 0;"></div>
+<div style="display: flex; align-items: center; gap: 12px; margin: 8px 0;">
+  <button id="playBtn" style="background: #6366f1; color: white; border: none; border-radius: 50%; width: 48px; height: 48px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center;">▶</button>
+  <span id="currentTime" style="font-variant-numeric: tabular-nums; color: #6b7280;">0:00</span>
+  <span style="color: #9ca3af;">/</span>
+  <span id="duration" style="font-variant-numeric: tabular-nums; color: #6b7280;">0:00</span>
+</div>
+
+<script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.esm.js" type="module"></script>
+<script type="module">
+import WaveSurfer from 'https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.esm.js';
+
+const wavesurfer = WaveSurfer.create({{
+  container: '#waveform',
+  waveColor: '#a5b4fc',
+  progressColor: '#6366f1',
+  cursorColor: '#4f46e5',
+  barWidth: 3,
+  barRadius: 3,
+  barGap: 2,
+  height: 80,
+  url: '/audio/podcast/{audio_filename}'
+}});
+
+const playBtn = document.getElementById('playBtn');
+const currentTimeEl = document.getElementById('currentTime');
+const durationEl = document.getElementById('duration');
+
+function formatTime(seconds) {{
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return m + ':' + String(s).padStart(2, '0');
+}}
+
+wavesurfer.on('ready', () => {{
+  durationEl.textContent = formatTime(wavesurfer.getDuration());
+}});
+
+wavesurfer.on('timeupdate', (time) => {{
+  currentTimeEl.textContent = formatTime(time);
+}});
+
+playBtn.addEventListener('click', () => {{
+  wavesurfer.playPause();
+}});
+
+wavesurfer.on('play', () => {{ playBtn.textContent = '⏸'; }});
+wavesurfer.on('pause', () => {{ playBtn.textContent = '▶'; }});
+</script>'''
+
+
 def generate_blog_post(
     transcript_text: str,
     audio_filename: str,
@@ -246,10 +309,20 @@ def generate_blog_post(
     readable = re.sub(r"<萌萌>(.*?)</萌萌>", r"**萌萌**：\1\n", readable, flags=re.DOTALL)
     readable = re.sub(r"<[^>]+>", "", readable)
 
+    # 生成新闻摘要 blockquote
+    news_summary = ""
+    if news_path:
+        headlines = _extract_news_headlines(news_path)
+        if headlines:
+            news_summary = f"\n> 📌 **今日看点**：{' | '.join(headlines)}\n"
+
     # 解析新闻列表
     news_section = ""
     if news_path:
         news_section = parse_news_markdown(news_path)
+
+    # wavesurfer 播放器
+    player_html = _wavesurfer_player(audio_filename)
 
     if news_section:
         post_content = f"""---
@@ -263,10 +336,8 @@ tags:
   - tech-daily
 author: AI Hosts
 ---
-
-<audio controls preload="metadata" class="w-full my-4">
-  <source src="/audio/podcast/{audio_filename}" type="audio/mpeg">
-</audio>
+{news_summary}
+{player_html}
 
 ---
 
@@ -296,9 +367,7 @@ tags:
 author: AI Hosts
 ---
 
-<audio controls preload="metadata" class="w-full my-4">
-  <source src="/audio/podcast/{audio_filename}" type="audio/mpeg">
-</audio>
+{player_html}
 
 ---
 
