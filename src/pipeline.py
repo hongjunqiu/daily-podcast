@@ -159,11 +159,74 @@ def merge_audio_files(audio_files: List[str], output_path: str) -> str:
 
 # ─────────────────────────── Step 4: Blog Post 生成 ───────────────────────────
 
+def parse_news_markdown(news_path: str) -> str:
+    """解析早报 markdown 文件，生成新闻列表 markdown。
+
+    Args:
+        news_path: 早报 markdown 文件路径。
+
+    Returns:
+        格式化的新闻列表 markdown 字符串，解析失败返回空字符串。
+    """
+    p = Path(news_path)
+    if not p.exists():
+        logger.warning("早报文件不存在: %s", news_path)
+        return ""
+
+    content = p.read_text(encoding="utf-8")
+    sections = []
+    current_heading = None
+    current_items: List = []
+
+    def _flush_section():
+        if current_heading and current_items:
+            final = []
+            for item in current_items:
+                if isinstance(item, tuple):
+                    title, summary, _ = item
+                    final.append(f"- **{title}** — {summary}")
+                else:
+                    final.append(item)
+            sections.append(f"### {current_heading}\n\n" + "\n".join(final))
+
+    for line in content.split("\n"):
+        heading_match = re.match(r"^##\s+(.+)$", line)
+        if heading_match:
+            _flush_section()
+            current_heading = heading_match.group(1).strip()
+            current_items = []
+            continue
+
+        item_match = re.match(r"^\d+\.\s+\*\*(.+?)\*\*\s*[—–-]\s*(.+)$", line)
+        if item_match:
+            # Flush previous tuple if it had no link
+            if current_items and isinstance(current_items[-1], tuple):
+                title, summary, _ = current_items[-1]
+                current_items[-1] = f"- **{title}** — {summary}"
+            current_items.append((item_match.group(1).strip(), item_match.group(2).strip(), None))
+            continue
+
+        link_match = re.match(r"^\s*🔗\s*<?([^>\s]+)>?\s*$", line)
+        if link_match and current_items and isinstance(current_items[-1], tuple):
+            title, summary, _ = current_items[-1]
+            current_items[-1] = f"- **[{title}]({link_match.group(1)})** — {summary}"
+            continue
+
+    _flush_section()
+
+    if not sections:
+        logger.warning("早报文件解析结果为空: %s", news_path)
+        return ""
+
+    return "\n\n".join(sections)
+
+
 def generate_blog_post(
     transcript_text: str,
     audio_filename: str,
     date: str,
     site_repo: str,
+    news_path: Optional[str] = None,
 ) -> str:
     """生成 Astro blog post markdown 文件。"""
     # 提取摘要
@@ -183,7 +246,45 @@ def generate_blog_post(
     readable = re.sub(r"<萌萌>(.*?)</萌萌>", r"**萌萌**：\1\n", readable, flags=re.DOTALL)
     readable = re.sub(r"<[^>]+>", "", readable)
 
-    post_content = f"""---
+    # 解析新闻列表
+    news_section = ""
+    if news_path:
+        news_section = parse_news_markdown(news_path)
+
+    if news_section:
+        post_content = f"""---
+publishDate: {date}
+title: '每日科技播客 {date}'
+excerpt: '{excerpt}'
+image: ~/assets/images/podcast-cover.png
+category: podcast
+tags:
+  - podcast
+  - tech-daily
+author: AI Hosts
+---
+
+<audio controls preload="metadata" class="w-full my-4">
+  <source src="/audio/podcast/{audio_filename}" type="audio/mpeg">
+</audio>
+
+---
+
+## 今日科技要闻
+
+{news_section}
+
+---
+
+<details>
+<summary>📝 完整对话文字版（点击展开）</summary>
+
+{readable.strip()}
+
+</details>
+"""
+    else:
+        post_content = f"""---
 publishDate: {date}
 title: '每日科技播客 {date}'
 excerpt: '{excerpt}'
@@ -268,6 +369,7 @@ def run_pipeline(
     site_repo: Optional[str] = None,
     dry_run: bool = False,
     date: Optional[str] = None,
+    news_path: Optional[str] = None,
 ) -> dict:
     """
     运行完整 pipeline。
@@ -307,7 +409,7 @@ def run_pipeline(
     if site_repo:
         copy_audio_to_site(final_audio, site_repo)
         audio_filename = f"{today}.mp3"
-        post_path = generate_blog_post(transcript_text, audio_filename, today, site_repo)
+        post_path = generate_blog_post(transcript_text, audio_filename, today, site_repo, news_path=news_path)
         results["post_path"] = post_path
 
         git_publish(site_repo, today, dry_run=dry_run)
@@ -328,6 +430,7 @@ def main():
     parser.add_argument("--site-repo", help="Astro 网站 repo 路径")
     parser.add_argument("--date", help="日期 YYYY-MM-DD，默认今天")
     parser.add_argument("--dry-run", action="store_true", help="不执行 git push")
+    parser.add_argument("--news-path", help="早报 markdown 文件路径")
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
@@ -337,6 +440,7 @@ def main():
         site_repo=args.site_repo,
         dry_run=args.dry_run,
         date=args.date,
+        news_path=args.news_path,
     )
 
     print(f"\n📊 Pipeline 结果:")

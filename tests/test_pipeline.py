@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from pipeline import parse_transcript, load_transcript, generate_blog_post, run_pipeline
+from pipeline import parse_transcript, load_transcript, generate_blog_post, parse_news_markdown, run_pipeline
 
 
 class TestParseTranscript(unittest.TestCase):
@@ -91,6 +91,71 @@ class TestGenerateBlogPost(unittest.TestCase):
             )
             content = open(post_path, "r", encoding="utf-8").read()
             self.assertIn("''", content)
+
+    def test_blog_with_news(self):
+        transcript = "<芊悦>大家好！</芊悦><萌萌>今天聊什么？</萌萌>"
+        news_content = """# 早报
+
+## 🚀 Product Hunt 热门产品
+
+1. **TestApp** — 测试应用描述
+   🔗 <https://example.com/test>
+
+---
+
+## 🔥 Hacker News 热帖
+
+1. **HN Post** — HN 描述
+   🔗 <https://news.ycombinator.com/1>
+"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            news_path = os.path.join(tmpdir, "news.md")
+            with open(news_path, "w", encoding="utf-8") as f:
+                f.write(news_content)
+
+            post_path = generate_blog_post(
+                transcript_text=transcript,
+                audio_filename="2026-04-01.mp3",
+                date="2026-04-01",
+                site_repo=tmpdir,
+                news_path=news_path,
+            )
+            content = open(post_path, "r", encoding="utf-8").read()
+            self.assertIn("今日科技要闻", content)
+            self.assertIn("[TestApp](https://example.com/test)", content)
+            self.assertIn("<details>", content)
+            self.assertIn("点击展开", content)
+
+    def test_blog_without_news_fallback(self):
+        transcript = "<芊悦>大家好！</芊悦><萌萌>今天聊什么？</萌萌>"
+        with tempfile.TemporaryDirectory() as site_repo:
+            post_path = generate_blog_post(
+                transcript_text=transcript,
+                audio_filename="2026-04-01.mp3",
+                date="2026-04-01",
+                site_repo=site_repo,
+                news_path=None,
+            )
+            content = open(post_path, "r", encoding="utf-8").read()
+            self.assertNotIn("今日科技要闻", content)
+            self.assertNotIn("<details>", content)
+            self.assertIn("完整对话文字版", content)
+
+
+class TestParseNewsMarkdown(unittest.TestCase):
+
+    def test_parse_with_links(self):
+        news = "## 🚀 分类\n\n1. **Title** — Summary\n   🔗 <https://example.com>\n"
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+            f.write(news)
+            f.flush()
+            result = parse_news_markdown(f.name)
+        os.unlink(f.name)
+        self.assertIn("[Title](https://example.com)", result)
+
+    def test_nonexistent_file(self):
+        result = parse_news_markdown("/nonexistent/file.md")
+        self.assertEqual(result, "")
 
 
 class TestRunPipeline(unittest.TestCase):
