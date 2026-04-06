@@ -323,14 +323,33 @@ def generate_blog_post(
     date: str,
     site_repo: str,
     news_path: Optional[str] = None,
+    audio_path: Optional[str] = None,
 ) -> str:
     """生成 Astro blog post markdown 文件。"""
+
+    # 获取音频文件大小和时长
+    audio_size = 0
+    audio_duration = 480
+    if audio_path and os.path.exists(audio_path):
+        audio_size = os.path.getsize(audio_path)
+        result = subprocess.run(
+            ['ffprobe', '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', audio_path],
+            capture_output=True, text=True
+        )
+        audio_duration = int(float(result.stdout.strip())) if result.returncode == 0 and result.stdout.strip() else 480
 
     # 转为可读文本
     readable = transcript_text
     readable = re.sub(r"<芊悦>(.*?)</芊悦>", r"**芊悦**：\1\n", readable, flags=re.DOTALL)
     readable = re.sub(r"<萌萌>(.*?)</萌萌>", r"**萌萌**：\1\n", readable, flags=re.DOTALL)
     readable = re.sub(r"<[^>]+>", "", readable)
+
+    # 生成 description
+    description = "每日科技播客"
+    if news_path:
+        desc_headlines = _extract_news_headlines(news_path, max_items=3)
+        if desc_headlines:
+            description = "今日看点：" + " | ".join(desc_headlines)
 
     # 生成新闻摘要 blockquote
     news_summary = ""
@@ -344,12 +363,19 @@ def generate_blog_post(
     if news_path:
         news_section = parse_news_markdown(news_path)
 
+    # 构建 audio metadata frontmatter 行
+    audio_meta = ""
+    if audio_size:
+        audio_meta += f"\naudioSize: {audio_size}"
+    if audio_duration:
+        audio_meta += f"\naudioDuration: {audio_duration}"
+
     if news_section:
         post_content = f"""---
 publishDate: {date}
 title: '每日科技播客 {date}'
-excerpt: ''
-audio: /audio/podcast/{audio_filename}
+excerpt: '{description}'
+audio: /audio/podcast/{audio_filename}{audio_meta}
 category: podcast
 tags:
   - podcast
@@ -377,8 +403,8 @@ author: AI Hosts
         post_content = f"""---
 publishDate: {date}
 title: '每日科技播客 {date}'
-excerpt: ''
-audio: /audio/podcast/{audio_filename}
+excerpt: '{description}'
+audio: /audio/podcast/{audio_filename}{audio_meta}
 category: podcast
 tags:
   - podcast
