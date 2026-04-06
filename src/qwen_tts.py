@@ -120,9 +120,20 @@ def synthesize_segment(
     if not audio_url:
         raise RuntimeError(f"DashScope TTS 未返回音频 URL: {result}")
 
-    # 下载音频
-    with urllib.request.urlopen(audio_url, timeout=120) as audio_resp:
-        audio_data = audio_resp.read()
+    # 下载音频 — 带 retry
+    audio_data = None
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(audio_url, timeout=120) as audio_resp:
+                audio_data = audio_resp.read()
+            break
+        except (urllib.error.URLError, TimeoutError) as e:
+            if attempt < 2:
+                wait = [1, 2, 4][attempt]
+                logger.warning("音频下载失败 (attempt %d/3), %ds 后重试: %s", attempt + 1, wait, e)
+                time.sleep(wait)
+            else:
+                raise RuntimeError(f"音频下载失败（3 次重试后）: {e}") from e
 
     # 保存为 wav 再转 mp3
     wav_path = output_path.rsplit(".", 1)[0] + ".wav"

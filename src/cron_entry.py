@@ -106,7 +106,7 @@ def main():
         logger.info("LLM 生成脚本完成 (%d 字)", len(script_text))
 
         # 验证并保存脚本
-        validate_script(script_text)
+        validate_script(script_text, strict=True)
         transcript_path = save_transcript(script_text, date=date_str)
         logger.info("脚本已保存: %s", transcript_path)
 
