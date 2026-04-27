@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -52,6 +53,12 @@ def parse_transcript(transcript_text: str) -> List[Tuple[str, str]]:
     if not segments:
         raise ValueError("对话脚本为空：所有段落都没有内容")
 
+    # Hard cap: 超过 42 段直接截断（避免合并导致说话人串台）
+    MAX_SEGMENTS = 42
+    if len(segments) > MAX_SEGMENTS:
+        logger.warning("对话脚本 %d 段超过上限 %d，截断至 %d 段", len(segments), MAX_SEGMENTS, MAX_SEGMENTS)
+        segments = segments[:MAX_SEGMENTS]
+
     logger.info("解析对话脚本: %d 段", len(segments))
     return segments
 
@@ -69,37 +76,57 @@ def load_transcript(path: str) -> str:
 
 # ─────────────────────────── Step 2: TTS 逐段合成 ───────────────────────────
 
+def _synthesize_one(
+    idx: int,
+    speaker: str,
+    text: str,
+    output_dir: str,
+    total: int,
+) -> Tuple[int, str]:
+    """合成单段 TTS，供线程池调用。返回 (index, output_path)。"""
+    voice_cfg = get_voice_config(speaker)
+    output_path = os.path.join(output_dir, f"{idx:03d}_{speaker}.mp3")
+    synthesize_segment(
+        text=text,
+        output_path=output_path,
+        voice_name=voice_cfg["voice"],
+        instructions=voice_cfg["instructions"],
+    )
+    logger.info("合成 %d/%d: %s (%d 字)", idx + 1, total, speaker, len(text))
+    return idx, output_path
+
+
 def synthesize_all_segments(
     segments: List[Tuple[str, str]],
     output_dir: str,
+    max_workers: int = 3,
 ) -> List[str]:
     """
-    对每个对话段落调用千问 TTS 合成音频。
+    并发调用千问 TTS 合成音频（默认 3 路并发，适配 DashScope QPS 限制）。
 
     Args:
         segments: (speaker, text) 列表。
         output_dir: 临时音频文件输出目录。
+        max_workers: 最大并发数。
 
     Returns:
         按顺序排列的 MP3 文件路径列表。
     """
     os.makedirs(output_dir, exist_ok=True)
-    audio_files = []
+    total = len(segments)
+    results: dict[int, str] = {}
 
-    for idx, (speaker, text) in enumerate(segments):
-        voice_cfg = get_voice_config(speaker)
-        output_path = os.path.join(output_dir, f"{idx:03d}_{speaker}.mp3")
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_synthesize_one, idx, speaker, text, output_dir, total): idx
+            for idx, (speaker, text) in enumerate(segments)
+        }
+        for future in as_completed(futures):
+            idx, path = future.result()  # 异常会在这里抛出
+            results[idx] = path
 
-        synthesize_segment(
-            text=text,
-            output_path=output_path,
-            voice_name=voice_cfg["voice"],
-            instructions=voice_cfg["instructions"],
-        )
-        audio_files.append(output_path)
-        logger.info("合成 %d/%d: %s (%d 字)", idx + 1, len(segments), speaker, len(text))
-
-    return audio_files
+    # 按 index 排序返回，保证音频顺序
+    return [results[i] for i in sorted(results)]
 
 
 # ─────────────────────────── Step 3: 音频合并 ───────────────────────────
@@ -442,6 +469,34 @@ def copy_audio_to_site(audio_path: str, site_repo: str) -> str:
 
 # ─────────────────────────── Step 5: Git 发布 ───────────────────────────
 
+def deploy_to_wechat(date, dry_run=False):
+    """部署播客到微信云开发。失败不影响整体 pipeline。"""
+    if dry_run:
+        logger.info("[DRY RUN] 跳过微信云开发部署")
+        return False
+
+    try:
+        env = os.environ.copy()
+        if "WECHAT_APP_SECRET" not in env:
+            logger.warning("WECHAT_APP_SECRET 未设置，跳过微信部署")
+            return False
+        cmd = [
+            "python3",
+            "/Users/hongjun/.openclaw/workspace/wechat-miniapp-podcast/scripts/deploy_podcast.py",
+            "--date", date,
+        ]
+        logger.info("部署到微信云开发: %s", date)
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=120)
+        if result.returncode != 0:
+            logger.warning("微信云开发部署失败 (exit %d): %s", result.returncode, result.stderr)
+            return False
+        logger.info("微信云开发部署成功 ✅")
+        return True
+    except Exception as e:
+        logger.warning("微信云开发部署异常: %s", e)
+        return False
+
+
 def git_publish(site_repo: str, date: str, dry_run: bool = False) -> None:
     """Git add + commit + push。"""
     if dry_run:
@@ -526,6 +581,9 @@ def run_pipeline(
 
         git_publish(site_repo, today, dry_run=dry_run)
         results["published"] = not dry_run
+
+        # Step 6: 部署到微信云开发
+        results["wechat_deployed"] = deploy_to_wechat(today, dry_run=dry_run)
     else:
         logger.info("未指定 site-repo，跳过 blog post 和发布")
 
